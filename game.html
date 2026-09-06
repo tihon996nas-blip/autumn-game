@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1"
+    />
+    <title>Autumn Dash</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --ink: #fff5e8;
+        --muted: #d7bda4;
+        --panel: rgba(40, 20, 26, 0.78);
+        --accent: #ffb347;
+        --accent-strong: #ed6a32;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: #1e1520;
+      }
+
+      body {
+        display: grid;
+        min-height: 100vh;
+        place-items: center;
+        overflow: hidden;
+        color: var(--ink);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+      }
+
+      .game-shell {
+        position: relative;
+        width: min(100vw, 720px);
+        height: min(100vh, 900px);
+        min-height: 540px;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 50% 20%, rgba(255, 179, 71, 0.2), transparent 32%),
+          linear-gradient(160deg, #401f2c 0%, #211827 58%, #11131e 100%);
+      }
+
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        cursor: crosshair;
+        touch-action: none;
+      }
+
+      .hud {
+        position: absolute;
+        inset: 0 0 auto;
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 24px clamp(18px, 5vw, 34px);
+        pointer-events: none;
+      }
+
+      .brand,
+      .score {
+        padding: 12px 16px;
+        border: 1px solid rgba(255, 245, 232, 0.16);
+        border-radius: 18px;
+        background: var(--panel);
+        box-shadow: 0 14px 40px rgba(10, 8, 16, 0.22);
+        backdrop-filter: blur(10px);
+      }
+
+      .brand {
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .brand strong {
+        display: block;
+        margin-top: 3px;
+        color: var(--accent);
+        font-size: clamp(22px, 5vw, 30px);
+        letter-spacing: -0.04em;
+        text-transform: none;
+      }
+
+      .score {
+        min-width: 94px;
+        text-align: right;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .score strong {
+        display: block;
+        color: var(--ink);
+        font-size: 28px;
+        line-height: 1;
+      }
+
+      .message {
+        position: absolute;
+        inset: 50% 24px auto;
+        transform: translateY(-50%);
+        padding: 28px 24px;
+        border: 1px solid rgba(255, 245, 232, 0.18);
+        border-radius: 26px;
+        background: rgba(30, 21, 32, 0.84);
+        box-shadow: 0 24px 80px rgba(10, 8, 16, 0.42);
+        text-align: center;
+        backdrop-filter: blur(15px);
+      }
+
+      .message[hidden] {
+        display: none;
+      }
+
+      .message h1 {
+        margin: 0 0 8px;
+        color: var(--accent);
+        font-size: clamp(34px, 10vw, 58px);
+        letter-spacing: -0.07em;
+      }
+
+      .message p {
+        max-width: 380px;
+        margin: 0 auto 22px;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      button {
+        border: 0;
+        border-radius: 999px;
+        padding: 13px 22px;
+        color: #28151d;
+        background: linear-gradient(135deg, #ffd27e, var(--accent-strong));
+        box-shadow: 0 10px 25px rgba(237, 106, 50, 0.32);
+        cursor: pointer;
+        font: inherit;
+        font-weight: 850;
+      }
+
+      button:hover {
+        filter: brightness(1.08);
+      }
+
+      .hint {
+        position: absolute;
+        right: 0;
+        bottom: 22px;
+        left: 0;
+        color: rgba(255, 245, 232, 0.7);
+        text-align: center;
+        font-size: 12px;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="game-shell" aria-label="Autumn Dash game">
+      <canvas id="game" aria-label="Catch the falling leaves"></canvas>
+
+      <header class="hud">
+        <div class="brand">
+          Autumn
+          <strong>Dash</strong>
+        </div>
+        <div class="score">
+          SCORE
+          <strong id="score">0</strong>
+        </div>
+      </header>
+
+      <section class="message" id="message">
+        <h1 id="message-title">Autumn Dash</h1>
+        <p id="message-copy">
+          Catch the golden leaves before they touch the ground. You have 30
+          seconds to make the best harvest.
+        </p>
+        <button id="start" type="button">Start game</button>
+      </section>
+
+      <div class="hint">Tap or click the falling leaves</div>
+    </main>
+
+    <script>
+      (() => {
+        "use strict";
+
+        const canvas = document.getElementById("game");
+        const context = canvas.getContext("2d");
+        const shell = document.querySelector(".game-shell");
+        const scoreLabel = document.getElementById("score");
+        const message = document.getElementById("message");
+        const messageTitle = document.getElementById("message-title");
+        const messageCopy = document.getElementById("message-copy");
+        const startButton = document.getElementById("start");
+
+        const colors = ["#f6bd60", "#f28482", "#f6a65b", "#e76f51", "#ffd166"];
+        const leaves = [];
+        let score = 0;
+        let running = false;
+        let startedAt = 0;
+        let lastFrame = 0;
+        let spawnTimer = 0;
+        let animationFrame = 0;
+        let width = 0;
+        let height = 0;
+        const duration = 30000;
+
+        function resize() {
+          const bounds = shell.getBoundingClientRect();
+          const ratio = Math.min(window.devicePixelRatio || 1, 2);
+          width = bounds.width;
+          height = bounds.height;
+          canvas.width = Math.round(width * ratio);
+          canvas.height = Math.round(height * ratio);
+          context.setTransform(ratio, 0, 0, ratio, 0, 0);
+        }
+
+        function spawnLeaf() {
+          const size = 11 + Math.random() * 12;
+          leaves.push({
+            x: size + Math.random() * (width - size * 2),
+            y: -size * 2,
+            size,
+            speed: 90 + Math.random() * 110,
+            sway: 0.8 + Math.random() * 1.8,
+            phase: Math.random() * Math.PI * 2,
+            rotation: Math.random() * Math.PI,
+            spin: (Math.random() - 0.5) * 2,
+            color: colors[Math.floor(Math.random() * colors.length)],
+          });
+        }
+
+        function drawBackground(time) {
+          const gradient = context.createLinearGradient(0, 0, 0, height);
+          gradient.addColorStop(0, "#492333");
+          gradient.addColorStop(0.58, "#291a29");
+          gradient.addColorStop(1, "#131521");
+          context.fillStyle = gradient;
+          context.fillRect(0, 0, width, height);
+
+          context.fillStyle = "rgba(255, 200, 120, 0.08)";
+          for (let index = 0; index < 7; index += 1) {
+            const x = width * (0.08 + index * 0.16);
+            const y = height * (0.24 + Math.sin(time / 1400 + index) * 0.06);
+            context.beginPath();
+            context.arc(x, y, 32 + index * 7, 0, Math.PI * 2);
+            context.fill();
+          }
+        }
+
+        function drawLeaf(leaf) {
+          context.save();
+          context.translate(leaf.x, leaf.y);
+          context.rotate(leaf.rotation);
+          context.fillStyle = leaf.color;
+          context.beginPath();
+          context.moveTo(0, -leaf.size);
+          context.bezierCurveTo(
+            leaf.size * 1.2,
+            -leaf.size * 0.5,
+            leaf.size * 0.9,
+            leaf.size * 0.8,
+            0,
+            leaf.size,
+          );
+          context.bezierCurveTo(
+            -leaf.size * 0.9,
+            leaf.size * 0.8,
+            -leaf.size * 1.2,
+            -leaf.size * 0.5,
+            0,
+            -leaf.size,
+          );
+          context.fill();
+          context.strokeStyle = "rgba(85, 37, 29, 0.5)";
+          context.lineWidth = 1.5;
+          context.beginPath();
+          context.moveTo(0, -leaf.size * 0.7);
+          context.lineTo(0, leaf.size * 0.72);
+          context.stroke();
+          context.restore();
+        }
+
+        function finish() {
+          running = false;
+          message.hidden = false;
+          messageTitle.textContent = "Time’s up";
+          messageCopy.textContent = `You caught ${score} ${
+            score === 1 ? "leaf" : "leaves"
+          }. Can you beat your harvest?`;
+          startButton.textContent = "Play again";
+        }
+
+        function loop(timestamp) {
+          const elapsed = timestamp - startedAt;
+          const delta = Math.min((timestamp - lastFrame) / 1000 || 0, 0.05);
+          lastFrame = timestamp;
+          drawBackground(timestamp);
+
+          if (running) {
+            spawnTimer -= delta;
+            if (spawnTimer <= 0) {
+              spawnLeaf();
+              spawnTimer = Math.max(0.18, 0.65 - elapsed / 70000);
+            }
+
+            for (let index = leaves.length - 1; index >= 0; index -= 1) {
+              const leaf = leaves[index];
+              leaf.y += leaf.speed * delta;
+              leaf.x += Math.sin(timestamp / 500 * leaf.sway + leaf.phase) * 0.7;
+              leaf.rotation += leaf.spin * delta;
+              drawLeaf(leaf);
+              if (leaf.y - leaf.size > height) {
+                leaves.splice(index, 1);
+              }
+            }
+
+            if (elapsed >= duration) {
+              finish();
+            }
+          } else {
+            leaves.forEach(drawLeaf);
+          }
+
+          if (running || leaves.length) {
+            animationFrame = requestAnimationFrame(loop);
+          }
+        }
+
+        function startGame() {
+          cancelAnimationFrame(animationFrame);
+          leaves.length = 0;
+          score = 0;
+          scoreLabel.textContent = "0";
+          startedAt = performance.now();
+          lastFrame = startedAt;
+          spawnTimer = 0;
+          running = true;
+          message.hidden = true;
+          animationFrame = requestAnimationFrame(loop);
+        }
+
+        function catchLeaf(event) {
+          if (!running) return;
+          const bounds = canvas.getBoundingClientRect();
+          const x = event.clientX - bounds.left;
+          const y = event.clientY - bounds.top;
+
+          for (let index = leaves.length - 1; index >= 0; index -= 1) {
+            const leaf = leaves[index];
+            const distance = Math.hypot(leaf.x - x, leaf.y - y);
+            if (distance <= leaf.size * 1.4) {
+              leaves.splice(index, 1);
+              score += 1;
+              scoreLabel.textContent = String(score);
+              break;
+            }
+          }
+        }
+
+        window.addEventListener("resize", resize);
+        canvas.addEventListener("pointerdown", catchLeaf);
+        startButton.addEventListener("click", startGame);
+        resize();
+        drawBackground(0);
+        spawnLeaf();
+        spawnLeaf();
+        leaves.forEach((leaf, index) => {
+          leaf.y = height * (0.35 + index * 0.18);
+        });
+        leaves.forEach(drawLeaf);
+      })();
+    </script>
+  </body>
+</html>
